@@ -5,7 +5,7 @@ import torchvision.transforms.functional as F
 from torch.utils.data import Dataset, DataLoader
 from torchvision import transforms as T, datasets
 from PIL import Image
-
+from torch.utils.data import Subset
 
 class DataManager:
     """
