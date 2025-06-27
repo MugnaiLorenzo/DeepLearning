@@ -1,5 +1,6 @@
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 
 # File: vit.py
 
@@ -31,6 +32,7 @@ class VisionTransformer(nn.Module):
 
         # 2. Learnable [CLS] token
         self.cls_token = nn.Parameter(torch.zeros(1, 1, embed_dim))
+        nn.init.trunc_normal_(self.cls_token, std=0.02)
 
         # 3. Learnable positional embeddings per CLS + tutte le patch
         self.pos_emb = nn.Parameter(torch.zeros(1, 1 + num_patches, embed_dim))
@@ -149,29 +151,36 @@ class ViTAnchor(nn.Module):
         - compute logits over prototypes
         """
         B, M, N, C, P, _ = anchors.shape
+
         # Student branch: flatten anchor batch
         anchors_flat = anchors.view(B * M, N, C, P, P)
-        feat_s = self.student(anchors_flat)        # [B*M, N+1, D]
-        feat_s = feat_s.view(B, M, N+1, -1)        # [B, M, N+1, D]
-        cls_s = feat_s[:, :, 0, :]                # [B, M, D]
+        feat_s = self.student(anchors_flat)  # [B*M, N+1, D]
+        feat_s = feat_s.view(B, M, N + 1, -1)  # [B, M, N+1, D]
+        cls_s = feat_s[:, :, 0, :]  # [B, M, D]
 
         # Teacher branch
         with torch.no_grad():
-            feat_t = self.teacher(targets)        # [B, N+1, D]
-            cls_t = feat_t[:, 0, :]               # [B, D]
+            feat_t = self.teacher(targets)  # [B, N+1, D]
+            cls_t = feat_t[:, 0, :]  # [B, D]
 
         # EMA update of teacher
         self._update_teacher()
 
+        # Normalize prototypes
+        prototypes = F.normalize(self.prototypes, dim=-1)  # [K, D]
+
         # Prototype matching
-        # Student logits: [B, M, K]
-        logits_s = torch.einsum('bmd,kd->bmk', cls_s, self.prototypes) / self.tau
-        # Teacher logits: [B, K]
-        logits_t = torch.einsum('bd,kd->bk', cls_t, self.prototypes) / self.tau_plus
+        logits_s = torch.einsum('bmd,kd->bmk', cls_s, prototypes) / self.tau  # [B, M, K]
+        logits_t = torch.einsum('bd,kd->bk', cls_t, prototypes) / self.tau_plus  # [B, K]
+
+        # Numerical stability
+        logits_s = logits_s - logits_s.max(dim=-1, keepdim=True).values
+        logits_t = logits_t - logits_t.max(dim=-1, keepdim=True).values
 
         # Softmax distributions
-        p_s = torch.softmax(logits_s, dim=-1)    # [B, M, K]
-        p_t = torch.softmax(logits_t, dim=-1)    # [B, K]
+        p_s = torch.softmax(logits_s, dim=-1)  # [B, M, K]
+        p_t = torch.softmax(logits_t, dim=-1)  # [B, K]
+
         return p_s, p_t, cls_s, cls_t
 
     def loss(self, p_s: torch.Tensor, p_t: torch.Tensor, lambda_reg: float):

@@ -7,6 +7,7 @@ from torchvision import transforms as T, datasets
 from PIL import Image
 from torch.utils.data import Subset
 
+
 class DataManager:
     """
     Utility class per gestione di trasformazioni e operazioni su singola immagine.
@@ -83,14 +84,8 @@ class DataManager:
 class MaskedPatchDataset(DataManager, Dataset):
     """Dataset che restituisce M viste mascherate, patch target e mask per ogni campione."""
 
-    def __init__(
-            self,
-            dataset_path: str,
-            patch_size: int = 16,
-            mask_ratio: float = 0.5,
-            random_mask_prob: float = 0.8,
-            num_anchors: int = 2,
-    ):
+    def __init__(self, dataset_path: str, patch_size: int = 16, mask_ratio: float = 0.5, random_mask_prob: float = 0.8,
+                 num_anchors: int = 2, ):
         DataManager.__init__(self, patch_size, mask_ratio, random_mask_prob)
         self.dataset = datasets.ImageFolder(root=dataset_path)
         self.samples = self.dataset.samples
@@ -125,7 +120,6 @@ class MaskedPatchDataset(DataManager, Dataset):
         # Stack delle viste e maschere
         anchors = torch.stack(anchor_views, dim=0)  # [M, N_patches, C, P, P]
         masks = torch.stack(masks, dim=0)  # [M, N_patches]
-
         return {
             'anchors': anchors,
             'targets': patches_target,
