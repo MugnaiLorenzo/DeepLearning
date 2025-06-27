@@ -139,8 +139,8 @@ def main():
         writer.add_scalar('Loss/matching', match, epoch)
         writer.add_scalar('Loss/me_max', me, epoch)
 
-        if loss < best_loss:
-            best_loss = loss
+        if match < best_loss:
+            best_loss = match
             torch.save({
                 'epoch': epoch,
                 'model_state': model.student.state_dict(),
